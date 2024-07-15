@@ -20,11 +20,11 @@ datasets/
 ### Training
 
 ```
-core/Depth6DPose/train.sh <config_path> <gpu_ids> (other args)
+core/DGNPose/train.sh <config_path> <gpu_ids> (other args)
 ```
 
 ### Testing
 
 ```
-core/Depth6DPose/test.sh <config_path> <gpu_ids> (other args)
+core/DGNPose/test.sh <config_path> <gpu_ids> (other args)
 ```

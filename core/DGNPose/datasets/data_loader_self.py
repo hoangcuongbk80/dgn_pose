@@ -82,7 +82,7 @@ def transform_instance_annotations(
     return annotation
 
 
-def build_Depth6DPose_augmentation(cfg, is_train):
+def build_DGNPose_augmentation(cfg, is_train):
     """Create a list of :class:`Augmentation` from config. when training 6d
     pose, cannot flip.
 
@@ -108,7 +108,7 @@ def build_Depth6DPose_augmentation(cfg, is_train):
     return augmentation
 
 
-class Depth6DPose_Self_DatasetFromList(Base_DatasetFromList):
+class DGNPose_Self_DatasetFromList(Base_DatasetFromList):
     """NOTE: we can also use the default DatasetFromList and implement a similar custom DataMapper,
     but it is harder to implement some features relying on other dataset dicts.
     # https://github.com/facebookresearch/detectron2/blob/master/detectron2/data/common.py
@@ -126,7 +126,7 @@ class Depth6DPose_Self_DatasetFromList(Base_DatasetFromList):
                 enabled, data loader workers can use shared RAM from master
                 process instead of making a copy.
         """
-        self.augmentation = build_Depth6DPose_augmentation(cfg, is_train=(split == "train"))
+        self.augmentation = build_DGNPose_augmentation(cfg, is_train=(split == "train"))
         # fmt: off
         self.img_format = cfg.INPUT.FORMAT  # default BGR
         self.with_depth = cfg.INPUT.WITH_DEPTH
@@ -638,7 +638,7 @@ def load_detections_with_poses_into_dataset(
     return new_dataset_dicts
 
 
-def build_Depth6DPose_self_train_loader(cfg, dataset_names, train_objs=None):
+def build_DGNPose_self_train_loader(cfg, dataset_names, train_objs=None):
     """A data loader is created by the following steps:
 
     1. Use the dataset names in config to query :class:`DatasetCatalog`, and obtain a list of dicts.
@@ -694,7 +694,7 @@ def build_Depth6DPose_self_train_loader(cfg, dataset_names, train_objs=None):
         final_dataset_dicts, visib_thr=cfg.DATALOADER.FILTER_VISIB_THR
     )
 
-    dataset = Depth6DPose_Self_DatasetFromList(cfg, split="train", lst=final_dataset_dicts, copy=False, flatten=True)
+    dataset = DGNPose_Self_DatasetFromList(cfg, split="train", lst=final_dataset_dicts, copy=False, flatten=True)
 
     sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
     logger = logging.getLogger(__name__)

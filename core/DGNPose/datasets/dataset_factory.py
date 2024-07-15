@@ -7,7 +7,7 @@ import mmcv
 import detectron2.utils.comm as comm
 import ref
 from detectron2.data import DatasetCatalog, MetadataCatalog
-from core.Depth6DPose.datasets import (
+from core.DGNPose.datasets import (
     lm_dataset_d2,
     lm_pbr,
     lm_blender,

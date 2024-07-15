@@ -44,7 +44,7 @@ if __name__ == "__main__":
     new_res_path = osp.join(
         PROJ_ROOT,
         "datasets/BOP_DATASETS/ycbv/test/init_poses/",
-        "resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_ycbv_pbr_100e_so_Depth6DPosePbrPose_withYolov4PbrBbox_wDeepimPbrPose_ycbv_train_real_uw.json",
+        "resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_ycbv_pbr_100e_so_DGNPosePbrPose_withYolov4PbrBbox_wDeepimPbrPose_ycbv_train_real_uw.json",
     )
     if osp.exists(new_res_path):
         wprint("{} already exists! overriding!".format(new_res_path))

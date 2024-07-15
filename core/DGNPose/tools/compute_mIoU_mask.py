@@ -10,48 +10,48 @@ from tqdm import tqdm
 cur_dir = osp.dirname(osp.abspath(__file__))
 sys.path.insert(0, osp.join(cur_dir, "../../../"))
 import ref
-from core.Depth6DPose.datasets.dataset_factory import register_datasets
+from core.DGNPose.datasets.dataset_factory import register_datasets
 from lib.utils.mask_utils import cocosegm2mask
 
 """
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_ape_bop_test --cls ape  \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/ape/inference_model_final_wo_optim-f0ef90df/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/ape/inference_model_final_wo_optim-f0ef90df/lmo_bop_test/results.pkl \
     --mask_type full_mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_can_bop_test --cls can \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/can/inference_model_final_wo_optim-ea5b9c78/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/can/inference_model_final_wo_optim-ea5b9c78/lmo_bop_test/results.pkl \
     --mask_type full_mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_cat_bop_test --cls cat \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/cat/inference_model_final_wo_optim-9931aeed/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/cat/inference_model_final_wo_optim-9931aeed/lmo_bop_test/results.pkl \
     --mask_type full_mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_driller_bop_test --cls driller \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/driller/inference_model_final_wo_optim-bded40f0/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/driller/inference_model_final_wo_optim-bded40f0/lmo_bop_test/results.pkl \
     --mask_type full_mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_duck_bop_test --cls duck \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/duck/inference_model_final_wo_optim-3cc3dbe6/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/duck/inference_model_final_wo_optim-3cc3dbe6/lmo_bop_test/results.pkl \
     --mask_type full_mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_eggbox_bop_test --cls eggbox \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/eggbox/inference_model_final_wo_optim-817002cd/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/eggbox/inference_model_final_wo_optim-817002cd/lmo_bop_test/results.pkl \
     --mask_type full_mask
     
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_glue_bop_test --cls glue \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/glue/inference_model_final_wo_optim-0b8a2e73/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/glue/inference_model_final_wo_optim-0b8a2e73/lmo_bop_test/results.pkl \
     --mask_type mask
 
-python core/Depth6DPose/tools/compute_mIoU_mask.py \
+python core/DGNPose/tools/compute_mIoU_mask.py \
     --dataset lmo_holepuncher_bop_test --cls holepuncher \
-    --res_path output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/holepuncher/inference_model_final_wo_optim-c98281c9/lmo_bop_test/results.pkl \
+    --res_path output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/holepuncher/inference_model_final_wo_optim-c98281c9/lmo_bop_test/results.pkl \
     --mask_type mask         
 """
 

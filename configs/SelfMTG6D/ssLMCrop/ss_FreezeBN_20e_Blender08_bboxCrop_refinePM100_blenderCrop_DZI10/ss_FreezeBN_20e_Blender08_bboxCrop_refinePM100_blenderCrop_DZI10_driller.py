@@ -1,8 +1,8 @@
 _base_ = ["ss_FreezeBN_20e_Blender08_bboxCrop_refinePM100_blenderCrop_DZI10_ape.py"]
 
-# refiner_cfg_path = "configs/_base_/Depth6DPose_refiner_base.py"
+# refiner_cfg_path = "configs/_base_/DGNPose_refiner_base.py"
 
-OUTPUT_DIR = "output/Depth6DPose/ssLMCrop/FreezeBN_20e_Blender08_bboxCrop_refinePM100_blenderCrop_DZI10/driller"
+OUTPUT_DIR = "output/DGNPose/ssLMCrop/FreezeBN_20e_Blender08_bboxCrop_refinePM100_blenderCrop_DZI10/driller"
 
 DATASETS = dict(
     TRAIN=("lm_crop_driller_train",),  # real data
@@ -13,5 +13,5 @@ DATASETS = dict(
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lm_crop_blender/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e/driller/model_final_wo_optim-c1cc7169.pth"
+    WEIGHTS="output/DGNPose/lm_crop_blender/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e/driller/model_final_wo_optim-c1cc7169.pth"
 )

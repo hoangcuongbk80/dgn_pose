@@ -18,12 +18,12 @@ if __name__ == "__main__":
     new_res_path = osp.join(
         PROJ_ROOT,
         "datasets/BOP_DATASETS/ycbv/test/init_poses/",
-        "resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_Depth6DPosePose_wBboxCrop_wCosyPose_ycbvTrainRealUw.json",
+        "resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_DGNPosePose_wBboxCrop_wCosyPose_ycbvTrainRealUw.json",
     )
     if osp.exists(new_res_path):
         wprint("{} already exists! overriding!".format(new_res_path))
 
-    results = mmcv.load(res_path)["Depth6DPose_init/refiner/iteration=2"]
+    results = mmcv.load(res_path)["DGNPose_init/refiner/iteration=2"]
     refined_poses = results.poses  # N*4*4 tensor
     init_poses = results.poses_input
     obj_strs = results.infos.label  # str f'obj_{:06d}'

@@ -1,7 +1,7 @@
 _base_ = ["ss_mlBCE_MaskFull_PredFull_lr1e_5_lower_woCenter_woDepth_refinePM10_01_ape.py"]
 
 OUTPUT_DIR = (
-    "output/Depth6DPose/ssLMO/ss_mlBCE_MaskFull_PredFull_lr1e_5_lower_woCenter_woDepth_refinePM10_lmoNoBopTest/driller"
+    "output/DGNPose/ssLMO/ss_mlBCE_MaskFull_PredFull_lr1e_5_lower_woCenter_woDepth_refinePM10_lmoNoBopTest/driller"
 )
 
 DATASETS = dict(
@@ -11,5 +11,5 @@ DATASETS = dict(
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/driller/model_final_wo_optim-bded40f0.pth"
+    WEIGHTS="output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/driller/model_final_wo_optim-bded40f0.pth"
 )

@@ -29,12 +29,12 @@ from lib.utils.mask_utils import binary_mask_to_rle
 from lib.utils.utils import dprint
 from lib.vis_utils.image import grid_show, vis_image_bboxes_cv2
 
-from .Depth6DPose_engine_utils import get_out_coor, get_out_mask
+from .DGNPose_engine_utils import get_out_coor, get_out_mask
 
 PROJ_ROOT = osp.normpath(osp.join(cur_dir, "../../.."))
 
 
-class Depth6DPose_EvaluatorCustom(DatasetEvaluator):
+class DGNPose_EvaluatorCustom(DatasetEvaluator):
     """custom evaluation of 6d pose."""
 
     def __init__(self, cfg, dataset_name, distributed, output_dir, train_objs=None):

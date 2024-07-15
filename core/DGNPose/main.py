@@ -33,12 +33,12 @@ from lib.utils.setup_logger import setup_my_logger
 from lib.utils.time_utils import get_time_str
 import ref
 
-from core.Depth6DPose.datasets.dataset_factory import register_datasets_in_cfg
-from core.Depth6DPose.engine.self_engine_utils import get_DIBR_models_renderer, get_dibr_models_renderer
-from core.Depth6DPose.engine.self_engine import do_test, do_train, do_save_results
+from core.DGNPose.datasets.dataset_factory import register_datasets_in_cfg
+from core.DGNPose.engine.self_engine_utils import get_DIBR_models_renderer, get_dibr_models_renderer
+from core.DGNPose.engine.self_engine import do_test, do_train, do_save_results
 
-from core.Depth6DPose.models import Depth6DPose, Depth6DPose_double_mask  # noqa
-from core.Depth6DPose.models import DeepIM_FlowNet  # noqa
+from core.DGNPose.models import DGNPose, DGNPose_double_mask  # noqa
+from core.DGNPose.models import DeepIM_FlowNet  # noqa
 
 
 logger = logging.getLogger("detectron2")
@@ -161,7 +161,7 @@ def main(args):
         else:
             raise ValueError("Unknown differentiable renderer type")
 
-    logger.info(f"Used Depth6DPose module name: {cfg.MODEL.POSE_NET.NAME}")
+    logger.info(f"Used DGNPose module name: {cfg.MODEL.POSE_NET.NAME}")
     model, optimizer = eval(cfg.MODEL.POSE_NET.NAME).build_model_optimizer(cfg, is_test=args.eval_only)
     logger.info("Model:\n{}".format(model))
 

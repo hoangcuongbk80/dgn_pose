@@ -1,6 +1,6 @@
-_base_ = ["../../../_base_/Depth6DPose_base.py"]
+_base_ = ["../../../_base_/DGNPose_base.py"]
 
-OUTPUT_DIR = "output/Depth6DPose/ssLMO/ss_mlBCE_MaskFull_PredFull_lr1e_5_lower_woCenter_refinePM10_lmoNoBopTest/ape"
+OUTPUT_DIR = "output/DGNPose/ssLMO/ss_mlBCE_MaskFull_PredFull_lr1e_5_lower_woCenter_refinePM10_lmoNoBopTest/ape"
 INPUT = dict(
     WITH_DEPTH=True,
     DZI_PAD_SCALE=1.5,
@@ -64,7 +64,7 @@ RENDERER = dict(DIFF_RENDERER="DIBR")  # DIBR | DIBR
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/ape/model_final_wo_optim-f0ef90df.pth",
+    WEIGHTS="output/DGNPose/lmoPbrSO/resnest50d_online_AugCosyAAEGray_mlBCE_DoubleMask_lmo_pbr_100e/ape/model_final_wo_optim-f0ef90df.pth",
     REFINER_WEIGHTS="",
     FREEZE_BN=True,
     SELF_TRAIN=True,  # whether to do self-supervised training
@@ -78,7 +78,7 @@ MODEL = dict(
         UPDATE_FREQ=10,  # update the mean teacher every n epochs
     ),
     POSE_NET=dict(
-        NAME="Depth6DPose_double_mask",  # used module file name
+        NAME="DGNPose_double_mask",  # used module file name
         # NOTE: for self-supervised training phase, use offline labels should be more accurate
         XYZ_ONLINE=False,  # rendering xyz online
         XYZ_BP=True,  # calculate xyz from depth by backprojection

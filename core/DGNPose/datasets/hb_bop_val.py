@@ -456,7 +456,7 @@ if __name__ == "__main__":
     """Test the  dataset loader.
 
     Usage:
-        python -m core.Depth6DPose_modeling.datasets.hb_bop_val dataset_name
+        python -m core.DGNPose_modeling.datasets.hb_bop_val dataset_name
     """
     from lib.vis_utils.image import grid_show
     from lib.utils.setup_logger import setup_my_logger

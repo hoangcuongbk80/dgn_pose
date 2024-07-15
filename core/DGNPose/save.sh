@@ -20,7 +20,7 @@ NCCL_DEBUG=INFO
 OMP_NUM_THREADS=1
 MKL_NUM_THREADS=1
 PYTHONPATH="$this_dir/../..":$PYTHONPATH \
-CUDA_VISIBLE_DEVICES=$2 python $this_dir/main_Depth6DPose.py \
+CUDA_VISIBLE_DEVICES=$2 python $this_dir/main_DGNPose.py \
     --config-file $CFG --num-gpus $NGPU \
     --opts TEST.SAVE_RESULTS_ONLY=True MODEL.WEIGHTS=$CKPT \
     ${@:4}

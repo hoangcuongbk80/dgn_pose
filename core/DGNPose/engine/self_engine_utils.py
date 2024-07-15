@@ -17,9 +17,9 @@ from core.utils.camera_geometry import get_K_crop_resize
 from core.utils.data_utils import xyz_to_region_batch, denormalize_image
 from core.utils.utils import get_emb_show
 from core.utils.edge_utils import compute_mask_edge_weights
-from core.Depth6DPose.losses.mask_losses import weighted_ex_loss_probs, soft_dice_loss
-from core.Depth6DPose.losses.depth_bp_chamfer_loss import depth_bp_chamfer_loss
-from core.Depth6DPose.losses.pm_loss import PyPMLoss
+from core.DGNPose.losses.mask_losses import weighted_ex_loss_probs, soft_dice_loss
+from core.DGNPose.losses.depth_bp_chamfer_loss import depth_bp_chamfer_loss
+from core.DGNPose.losses.pm_loss import PyPMLoss
 from core.utils.zoom_utils import batch_crop_resize
 
 from lib.torch_utils.color.lab import rgb_to_lab, normalize_lab

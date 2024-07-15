@@ -1,8 +1,8 @@
-_base_ = ["../../../_base_/Depth6DPose_base.py"]
+_base_ = ["../../../_base_/DGNPose_base.py"]
 
-# refiner_cfg_path = "configs/_base_/Depth6DPose_refiner_base.py"
+# refiner_cfg_path = "configs/_base_/DGNPose_refiner_base.py"
 
-OUTPUT_DIR = "output/Depth6DPose/ssLMCrop/FreezeBN_20e_Blender08_bboxCrop_refinePM100_blenderCrop_DZI10/ape"
+OUTPUT_DIR = "output/DGNPose/ssLMCrop/FreezeBN_20e_Blender08_bboxCrop_refinePM100_blenderCrop_DZI10/ape"
 INPUT = dict(
     WITH_DEPTH=True,
     DZI_PAD_SCALE=1.0,
@@ -54,7 +54,7 @@ DATASETS = dict(
     TEST=("lm_crop_ape_test",),
     # for self-supervised training
     DET_FILES_TRAIN=(
-        "datasets/BOP_DATASETS/lm/test/init_poses/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e_so_Depth6DPosePose_wBboxCrop_wDeepimPose_lmCropTrain.json",
+        "datasets/BOP_DATASETS/lm/test/init_poses/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e_so_DGNPosePose_wBboxCrop_wDeepimPose_lmCropTrain.json",
     ),
     DET_THR_TRAIN=0.5,
 )
@@ -63,7 +63,7 @@ RENDERER = dict(DIFF_RENDERER="DIBR")  # DIBR | DIBR
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lm_crop_blender/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e/ape/model_final_wo_optim-ab325295.pth",
+    WEIGHTS="output/DGNPose/lm_crop_blender/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_bboxCrop_DZI10_lm_blender_100e/ape/model_final_wo_optim-ab325295.pth",
     REFINER_WEIGHTS="",
     FREEZE_BN=True,
     SELF_TRAIN=True,  # whether to do self-supervised training
@@ -79,7 +79,7 @@ MODEL = dict(
         UPDATE_FREQ=10,  # update the mean teacher every n epochs
     ),
     POSE_NET=dict(
-        NAME="Depth6DPose",  # used module file name
+        NAME="DGNPose",  # used module file name
         # NOTE: for self-supervised training phase, use offline labels should be more accurate
         XYZ_ONLINE=False,  # rendering xyz online
         XYZ_BP=True,  # calculate xyz from depth by backprojection

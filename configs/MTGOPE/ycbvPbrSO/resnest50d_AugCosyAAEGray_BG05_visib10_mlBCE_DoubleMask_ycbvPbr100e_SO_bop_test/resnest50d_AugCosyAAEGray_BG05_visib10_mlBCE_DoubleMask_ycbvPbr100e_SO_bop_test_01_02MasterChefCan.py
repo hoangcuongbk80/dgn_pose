@@ -1,7 +1,7 @@
-_base_ = ["../../../_base_/Depth6DPose_base.py"]
+_base_ = ["../../../_base_/DGNPose_base.py"]
 
 OUTPUT_DIR = (
-    "output/Depth6DPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/01_02MasterChefCan"
+    "output/DGNPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/01_02MasterChefCan"
 )
 
 INPUT = dict(
@@ -80,7 +80,7 @@ MODEL = dict(
     PIXEL_MEAN=[0.0, 0.0, 0.0],
     PIXEL_STD=[255.0, 255.0, 255.0],
     POSE_NET=dict(
-        NAME="Depth6DPose_double_mask",
+        NAME="DGNPose_double_mask",
         XYZ_ONLINE=True,
         NUM_CLASSES=21,  # not used for class-agnostic
         BACKBONE=dict(

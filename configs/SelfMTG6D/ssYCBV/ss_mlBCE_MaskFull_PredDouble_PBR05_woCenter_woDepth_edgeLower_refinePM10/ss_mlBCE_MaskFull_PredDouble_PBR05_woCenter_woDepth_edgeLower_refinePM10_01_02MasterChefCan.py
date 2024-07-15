@@ -1,7 +1,7 @@
-_base_ = ["../../../_base_/Depth6DPose_base.py"]
+_base_ = ["../../../_base_/DGNPose_base.py"]
 
 OUTPUT_DIR = (
-    "output/Depth6DPose/ssYCBV/ss_mlBCE_MaskFull_PredDouble_PBR05_woCenter_woDepth_edgeLower_refinePM10/01_02MasterChefCan"
+    "output/DGNPose/ssYCBV/ss_mlBCE_MaskFull_PredDouble_PBR05_woCenter_woDepth_edgeLower_refinePM10/01_02MasterChefCan"
 )
 
 INPUT = dict(
@@ -56,7 +56,7 @@ DATASETS = dict(
     # AP	AP50	AP75	AR	inf.time
     # 77.954	93.79 	90.71 	85.00 	24.4ms
     DET_FILES_TRAIN=(
-        "datasets/BOP_DATASETS/ycbv/test/init_poses/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_Depth6DPosePose_wBboxCrop_wCosyPose_ycbvTrainRealUw.json",
+        "datasets/BOP_DATASETS/ycbv/test/init_poses/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_DGNPosePose_wBboxCrop_wCosyPose_ycbvTrainRealUw.json",
     ),
     DET_THR_TRAIN=0.5,
     DET_FILES_TEST=(
@@ -85,7 +85,7 @@ RENDERER = dict(
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/01_02MasterChefCan/model_final_wo_optim-8624c7f1.pth",
+    WEIGHTS="output/DGNPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/01_02MasterChefCan/model_final_wo_optim-8624c7f1.pth",
     REFINER_WEIGHTS="",
     FREEZE_BN=True,
     SELF_TRAIN=True,  # whether to do self-supervised training
@@ -99,7 +99,7 @@ MODEL = dict(
         UPDATE_FREQ=10,  # update the mean teacher every n epochs
     ),
     POSE_NET=dict(
-        NAME="Depth6DPose_double_mask",  # used module file name
+        NAME="DGNPose_double_mask",  # used module file name
         # NOTE: for self-supervised training phase, use offline labels should be more accurate
         XYZ_ONLINE=False,  # rendering xyz online
         XYZ_BP=True,  # calculate xyz from depth by backprojection

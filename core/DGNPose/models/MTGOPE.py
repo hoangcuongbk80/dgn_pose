@@ -31,10 +31,10 @@ from .net_factory import BACKBONES
 logger = logging.getLogger(__name__)
 
 
-class Depth6DPose(nn.Module):
+class DGNPose(nn.Module):
     def __init__(self, cfg, backbone, geo_head_net, neck=None, pnp_net=None):
         super().__init__()
-        assert cfg.MODEL.POSE_NET.NAME == "Depth6DPose", cfg.MODEL.POSE_NET.NAME
+        assert cfg.MODEL.POSE_NET.NAME == "DGNPose", cfg.MODEL.POSE_NET.NAME
         self.backbone = backbone
         self.neck = neck
 
@@ -64,7 +64,7 @@ class Depth6DPose(nn.Module):
 
     def train(self, mode=True):
         """Override the default train() to freeze the BN parameters."""
-        super(Depth6DPose, self).train(mode)
+        super(DGNPose, self).train(mode)
         cfg = self.cfg
         if cfg.MODEL.FREEZE_BN:
             logger.info("freeze bn...")
@@ -269,7 +269,7 @@ class Depth6DPose(nn.Module):
                 "vis/tz_rel_gt": gt_trans_ratio[0, 2].detach().item(),
             }
 
-            loss_dict = self.Depth6DPose_loss(
+            loss_dict = self.DGNPose_loss(
                 cfg=self.cfg,
                 out_mask=mask,
                 gt_mask_trunc=gt_mask_trunc,
@@ -310,7 +310,7 @@ class Depth6DPose(nn.Module):
             return out_dict, loss_dict
         return out_dict
 
-    def Depth6DPose_loss(
+    def DGNPose_loss(
         self,
         cfg,
         out_mask,
@@ -571,7 +571,7 @@ def build_model_optimizer(cfg, is_test=False):
     params_lr_list.extend(pnp_net_params)
 
     # build model
-    model = Depth6DPose(cfg, backbone, neck=neck, geo_head_net=geo_head, pnp_net=pnp_net)
+    model = DGNPose(cfg, backbone, neck=neck, geo_head_net=geo_head, pnp_net=pnp_net)
     if net_cfg.USE_MTL:
         params_lr_list.append(
             {

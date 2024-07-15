@@ -37,7 +37,7 @@ from core.utils.my_writer import (
 from core.utils.data_utils import denormalize_image
 
 # change below for different methods
-from core.Depth6DPose.datasets.data_loader_refiner import (
+from core.DGNPose.datasets.data_loader_refiner import (
     build_refiner_train_loader,
     build_refiner_test_loader,
 )

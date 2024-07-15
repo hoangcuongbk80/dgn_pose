@@ -4,6 +4,7 @@ import os.path as osp
 import torch
 from torch.cuda.amp import autocast, GradScaler
 import mmcv
+from mmcv.runner.checkpoint import load_checkpoint
 import time
 import cv2
 import numpy as np
@@ -23,9 +24,9 @@ from detectron2.evaluation import (
 )
 
 from detectron2.data.common import AspectRatioGroupedDataset
-from detectron2.data import MetadataCatalog
+from detectron2.data import MetadataCatalog, DatasetCatalog
 
-from lib.utils.setup_logger import log_first_n
+from lib.pysixd.pose_error import re, te, add
 from lib.utils.utils import dprint
 from lib.vis_utils.image import grid_show, vis_bbox_opencv
 from lib.torch_utils.torch_utils import ModelEMA
@@ -36,11 +37,15 @@ from core.utils.my_checkpoint import MyCheckpointer
 from core.utils.my_writer import MyCommonMetricPrinter, MyJSONWriter, MyTensorboardXWriter
 from core.utils.utils import get_emb_show
 from core.utils.data_utils import denormalize_image
-from core.Depth6DPose.datasets.data_loader import build_Depth6DPose_train_loader, build_Depth6DPose_test_loader
+from core.DGNPose.datasets.data_loader_self import build_DGNPose_self_train_loader
+from core.DGNPose.datasets.data_loader import build_DGNPose_train_loader, build_DGNPose_test_loader
+from core.DGNPose.losses.ssim import SSIM, MS_SSIM
+from core.DGNPose.losses.perceptual_loss import PerceptualLoss
 
-from .Depth6DPose_engine_utils import batch_data, get_out_coor, get_out_mask
-from .Depth6DPose_evaluator import Depth6DPose_inference_on_dataset, Depth6DPose_Evaluator, Depth6DPose_save_result_of_dataset
-from .Depth6DPose_custom_evaluator import Depth6DPose_EvaluatorCustom
+from .DGNPose_engine_utils import batch_data, get_out_coor, get_out_mask
+from .self_engine_utils import batch_data_self, compute_self_loss
+from .DGNPose_evaluator import DGNPose_inference_on_dataset, DGNPose_Evaluator, DGNPose_save_result_of_dataset
+from .DGNPose_custom_evaluator import DGNPose_EvaluatorCustom
 import ref
 
 
@@ -92,8 +97,8 @@ def get_evaluator(cfg, dataset_name, output_folder=None):
     dataset_meta = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
     train_obj_names = dataset_meta.objs
     if evaluator_type == "bop":
-        Depth6DPose_eval_cls = Depth6DPose_Evaluator if cfg.VAL.get("USE_BOP", False) else Depth6DPose_EvaluatorCustom
-        return Depth6DPose_eval_cls(
+        DGNPose_eval_cls = DGNPose_Evaluator if cfg.VAL.get("USE_BOP", False) else DGNPose_EvaluatorCustom
+        return DGNPose_eval_cls(
             cfg, dataset_name, distributed=_distributed, output_dir=output_folder, train_objs=train_obj_names
         )
 
@@ -118,8 +123,8 @@ def do_save_results(cfg, model, epoch=None, iteration=None):
         else:
             save_out_dir = osp.join(cfg.OUTPUT_DIR, f"inference_{model_name}", dataset_name)
 
-        data_loader = build_Depth6DPose_test_loader(cfg, dataset_name, train_objs=train_obj_names)
-        Depth6DPose_save_result_of_dataset(
+        data_loader = build_DGNPose_test_loader(cfg, dataset_name, train_objs=train_obj_names)
+        DGNPose_save_result_of_dataset(
             cfg,
             model,
             data_loader,
@@ -139,8 +144,8 @@ def do_test(cfg, model, epoch=None, iteration=None):
         else:
             eval_out_dir = osp.join(cfg.OUTPUT_DIR, f"inference_{model_name}", dataset_name)
         evaluator = get_evaluator(cfg, dataset_name, eval_out_dir)
-        data_loader = build_Depth6DPose_test_loader(cfg, dataset_name, train_objs=evaluator.train_objs)
-        results_i = Depth6DPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_test=cfg.TEST.AMP_TEST)
+        data_loader = build_DGNPose_test_loader(cfg, dataset_name, train_objs=evaluator.train_objs)
+        results_i = DGNPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_test=cfg.TEST.AMP_TEST)
         results[dataset_name] = results_i
         # if comm.is_main_process():
         #     logger.info("Evaluation results for {} in csv format:".format(dataset_name))
@@ -162,8 +167,24 @@ def get_tbx_event_writer(out_dir, backup=False):
     return tbx_event_writer
 
 
-def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
+def do_train(
+    cfg,
+    args,
+    model,
+    optimizer,
+    model_teacher=None,
+    refiner=None,
+    ref_cfg=None,
+    renderer=None,
+    ren_models=None,
+    resume=False,
+):
+    net_cfg = cfg.MODEL.POSE_NET
+    self_loss_cfg = net_cfg.SELF_LOSS_CFG
     model.train()
+    model_teacher.eval()
+    if refiner is not None:
+        refiner.eval()
 
     # some basic settings =========================
     dataset_meta = MetadataCatalog.get(cfg.DATASETS.TRAIN[0])
@@ -172,14 +193,14 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
 
     # load data ===================================
     train_dset_names = cfg.DATASETS.TRAIN
-    data_loader = build_Depth6DPose_train_loader(cfg, train_dset_names)
+    data_loader = build_DGNPose_self_train_loader(cfg, train_dset_names, train_objs=obj_names)
     data_loader_iter = iter(data_loader)
 
-    # load 2nd train dataloader if needed
+    # load 2nd train dataloader if needed (assume this is synthetic data)
     train_2_dset_names = cfg.DATASETS.get("TRAIN2", ())
     train_2_ratio = cfg.DATASETS.get("TRAIN2_RATIO", 0.0)
     if train_2_ratio > 0.0 and len(train_2_dset_names) > 0:
-        data_loader_2 = build_Depth6DPose_train_loader(cfg, train_2_dset_names)
+        data_loader_2 = build_DGNPose_train_loader(cfg, train_2_dset_names)
         data_loader_2_iter = iter(data_loader_2)
     else:
         data_loader_2 = None
@@ -188,14 +209,11 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
     images_per_batch = cfg.SOLVER.IMS_PER_BATCH
     if isinstance(data_loader, AspectRatioGroupedDataset):
         dataset_len = len(data_loader.dataset.dataset)
-        if data_loader_2 is not None:
-            dataset_len += len(data_loader_2.dataset.dataset)
         iters_per_epoch = dataset_len // images_per_batch
     else:
         dataset_len = len(data_loader.dataset)
-        if data_loader_2 is not None:
-            dataset_len += len(data_loader_2.dataset)
         iters_per_epoch = dataset_len // images_per_batch
+    # NOTE: here iters are based on real data!!!
     max_iter = cfg.SOLVER.TOTAL_EPOCHS * iters_per_epoch
     dprint("images_per_batch: ", images_per_batch)
     dprint("dataset length: ", dataset_len)
@@ -212,20 +230,28 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
     grad_scaler = GradScaler()
 
     # resume or load model ===================================
+    # teacher/student initialized by the same weights (only load teacher for train)
+    assert osp.exists(cfg.MODEL.WEIGHTS), cfg.MODEL.WEIGHTS
     checkpointer = MyCheckpointer(
         model,
         cfg.OUTPUT_DIR,
+        model_teacher=model_teacher,  # NOTE: teacher
         optimizer=optimizer,
         scheduler=scheduler,
         gradscaler=grad_scaler,
         save_to_disk=comm.is_main_process(),
     )
     start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
+    start_epoch = start_iter // iters_per_epoch + 1  # first epoch is 1
 
-    # Exponential moving average (NOTE: initialize ema after loading weights) ========================
-    if comm.is_main_process() and cfg.MODEL.EMA.ENABLED:
-        ema = ModelEMA(model, **cfg.MODEL.EMA.INIT_CFG)
-        ema.updates = start_iter // accumulate_iter
+    # initialize teacher model
+    logger.info("load teacher weights from {}".format(cfg.MODEL.WEIGHTS))
+    load_checkpoint(model_teacher, cfg.MODEL.WEIGHTS, logger=logger)
+
+    # Exponential moving average for teacher (NOTE: initialize ema after loading weights) ========================
+    if comm.is_main_process():
+        ema = ModelEMA(model_teacher, **cfg.MODEL.EMA.INIT_CFG)
+        ema.updates = start_epoch // cfg.MODEL.EMA.UPDATE_FREQ
         # save the ema model
         checkpointer.model = ema.ema.module if hasattr(ema.ema, "module") else ema.ema
     else:
@@ -234,11 +260,12 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
     if comm._USE_HVD:  # hvd may be not available, so do not use the one in args
         import horovod.torch as hvd
 
-        # not needed
-        # start_iter = hvd.broadcast(torch.tensor(start_iter), root_rank=0, name="start_iter").item()
-
         # Horovod: broadcast parameters & optimizer state.
         hvd.broadcast_parameters(model.state_dict(), root_rank=0)
+        hvd.broadcast_parameters(model_teacher.state_dict(), root_rank=0)
+        if refiner is not None:
+            hvd.broadcast_parameters(refiner.state_dict(), root_rank=0)
+
         hvd.broadcast_optimizer_state(optimizer, root_rank=0)
         # Horovod: (optional) compression algorithm.
         compression = hvd.Compression.fp16 if args.fp16_allreduce else hvd.Compression.none
@@ -257,7 +284,19 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
         checkpointer, ckpt_period, max_iter=max_iter, max_to_keep=cfg.SOLVER.MAX_TO_KEEP
     )
 
-    # build writers ==============================================
+    # ------------------------------------------------------------------
+    # init some loss funcs
+    # ------------------------------------------------------------------
+    ssim_func = SSIM(data_range=1.0).cuda()
+    ms_ssim_func = MS_SSIM(data_range=1.0, normalize=True).cuda()
+    if self_loss_cfg.PERCEPT_LW > 0:
+        percep_loss_func = PerceptualLoss(model="net", net="alex", use_gpu=True)
+    else:
+        percep_loss_func = None
+
+    # ------------------------------------------------------------------
+    # build writers
+    # ------------------------------------------------------------------
     tbx_event_writer = get_tbx_event_writer(cfg.OUTPUT_DIR, backup=not cfg.get("RESUME", False))
     tbx_writer = tbx_event_writer._writer  # NOTE: we want to write some non-scalar data
     writers = (
@@ -265,6 +304,16 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
         if comm.is_main_process()
         else []
     )
+
+    if cfg.TRAIN.DEBUG_SINGLE_IM:
+        # load gt pose
+        gt_dict = DatasetCatalog.get(train_dset_names[0])[0]
+        scene_im_id = gt_dict["scene_im_id"]
+        im_id = scene_im_id.split("/")[1]
+        assert im_id in train_dset_names[0], "{} {}".format(im_id, train_dset_names[0])
+        gt_pose = gt_dict["annotations"][0]["pose"]
+
+        debug_results = {}
 
     # compared to "train_net.py", we do not support accurate timing and
     # precise BN here, because they are not trivial to implement
@@ -277,56 +326,134 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
             epoch = iteration // iters_per_epoch + 1  # epoch start from 1
             storage.put_scalar("epoch", epoch, smoothing_hint=False)
 
-            if np.random.rand() < train_2_ratio:
+            is_log_iter = False
+            if iteration - start_iter > 5 and (
+                (iteration + 1) % cfg.TRAIN.PRINT_FREQ == 0 or iteration == max_iter - 1 or iteration < 100
+            ):
+                is_log_iter = True
+
+            if cfg.TRAIN.DEBUG_SINGLE_IM:
+                is_log_iter = True
+
+            do_syn_sup = False
+            do_self = False
+            if np.random.rand() < train_2_ratio:  # synthetic supervised
                 data = next(data_loader_2_iter)
-            else:
+                do_syn_sup = True
+            else:  # self-supervised
                 data = next(data_loader_iter)
+                do_self = True
 
             if iter_time is not None:
                 storage.put_scalar("time", time.perf_counter() - iter_time)
             iter_time = time.perf_counter()
 
-            # if cfg.TRAIN.VIS:
-            #     vis_train_data(data, obj_names, cfg)
+            # ------------------------------------------------------------------
+            # forward
+            # ------------------------------------------------------------------
+            if do_syn_sup:  # (synthetic supervised batch)
+                # NOTE: use offline xyz labels (DIBR rendered xyz is not very accurate)
+                assert net_cfg.XYZ_ONLINE is False, "Use offline xyz labels for self-supervised training!"
+                batch = batch_data(cfg, data, renderer=None)
+                with autocast(enabled=AMP_ON):
+                    out_dict, loss_dict = model(
+                        batch["roi_img"],
+                        gt_xyz=batch.get("roi_xyz", None),
+                        gt_xyz_bin=batch.get("roi_xyz_bin", None),
+                        gt_mask_trunc=batch["roi_mask_trunc"],
+                        gt_mask_visib=batch["roi_mask_visib"],
+                        gt_mask_obj=batch["roi_mask_obj"],
+                        gt_mask_full=batch.get("roi_mask_full", None),
+                        gt_region=batch.get("roi_region", None),
+                        gt_ego_rot=batch.get("ego_rot", None),
+                        gt_trans=batch.get("trans", None),
+                        gt_trans_ratio=batch["roi_trans_ratio"],
+                        gt_points=batch.get("roi_points", None),
+                        sym_infos=batch.get("sym_info", None),
+                        roi_classes=batch["roi_cls"],
+                        roi_cams=batch["roi_cam"],
+                        roi_whs=batch["roi_wh"],
+                        roi_centers=batch["roi_center"],
+                        resize_ratios=batch["resize_ratio"],
+                        roi_coord_2d=batch.get("roi_coord_2d", None),
+                        roi_extents=batch.get("roi_extent", None),
+                        do_loss=True,
+                    )
+                    losses = sum(loss_dict.values())
+                    assert torch.isfinite(losses).all(), loss_dict
 
-            # forward ============================================================
-            batch = batch_data(cfg, data, renderer=renderer)
-            with autocast(enabled=AMP_ON):
-                out_dict, loss_dict = model(
-                    batch["roi_img"],
-                    gt_xyz=batch.get("roi_xyz", None),
-                    gt_xyz_bin=batch.get("roi_xyz_bin", None),
-                    gt_mask_trunc=batch["roi_mask_trunc"],
-                    gt_mask_visib=batch["roi_mask_visib"],
-                    gt_mask_full=batch.get("roi_mask_full", None),
-                    gt_mask_obj=batch["roi_mask_obj"],
-                    gt_region=batch.get("roi_region", None),
-                    gt_ego_rot=batch.get("ego_rot", None),
-                    gt_trans=batch.get("trans", None),
-                    gt_trans_ratio=batch["roi_trans_ratio"],
-                    gt_points=batch.get("roi_points", None),
-                    sym_infos=batch.get("sym_info", None),
-                    roi_classes=batch["roi_cls"],
-                    roi_cams=batch["roi_cam"],
-                    roi_whs=batch["roi_wh"],
-                    roi_centers=batch["roi_center"],
-                    resize_ratios=batch["resize_ratio"],
-                    roi_coord_2d=batch.get("roi_coord_2d", None),
-                    roi_coord_2d_rel=batch.get("roi_coord_2d_rel", None),
-                    roi_extents=batch.get("roi_extent", None),
-                    do_loss=True,
+                loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
+                losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+                if comm.is_main_process():
+                    storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
+            elif do_self:
+                batch = batch_data_self(cfg, data, model_teacher=model_teacher)
+                with autocast(enabled=AMP_ON):
+                    # only outputs, no losses
+                    out_dict = model(
+                        batch["roi_img"],
+                        gt_points=batch.get("roi_points", None),
+                        sym_infos=batch.get("sym_info", None),
+                        roi_classes=batch["roi_cls"],
+                        roi_cams=batch["roi_cam"],
+                        roi_whs=batch["roi_wh"],
+                        roi_centers=batch["roi_center"],
+                        resize_ratios=batch["resize_ratio"],
+                        roi_coord_2d=batch.get("roi_coord_2d", None),
+                        roi_extents=batch.get("roi_extent", None),
+                        do_self=True,
+                    )
+                # compute self-supervised losses
+
+                loss_dict = compute_self_loss(
+                    cfg,
+                    batch,
+                    pred_rot=out_dict["rot"],
+                    pred_trans=out_dict["trans"],
+                    pred_mask_prob=out_dict["mask_prob"],
+                    pred_full_mask_prob=out_dict["full_mask_prob"] if "full_mask_prob" in out_dict.keys() else None,
+                    pred_coor_x=out_dict["coor_x"],
+                    pred_coor_y=out_dict["coor_y"],
+                    pred_coor_z=out_dict["coor_z"],
+                    pred_region=out_dict["region"],
+                    ren=renderer,
+                    ren_models=ren_models,
+                    ssim_func=ssim_func,
+                    ms_ssim_func=ms_ssim_func,
+                    perceptual_func=percep_loss_func,
+                    tb_writer=tbx_writer if is_log_iter else None,
+                    iteration=iteration if is_log_iter else None,
                 )
                 losses = sum(loss_dict.values())
                 assert torch.isfinite(losses).all(), loss_dict
-            if comm.is_main_process():
-                log_first_n(logging.INFO, "iteration {} forward finished.".format(iteration), n=2)
 
-            loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
-            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-            if comm.is_main_process():
-                storage.put_scalars(total_loss=losses_reduced, **loss_dict_reduced)
+                loss_dict_reduced = {k: v.item() for k, v in comm.reduce_dict(loss_dict).items()}
+                losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+                if comm.is_main_process():
+                    storage.put_scalars(total_loss_self=losses_reduced, **loss_dict_reduced)
+                    if cfg.TRAIN.DEBUG_SINGLE_IM:
+                        r_est = out_dict["rot"][0].detach().cpu().numpy()
+                        t_est = out_dict["trans"][0].detach().cpu().numpy()
+                        r_error = re(r_est, gt_pose[:3, :3])
+                        t_error = te(t_est, gt_pose[:3, 3]) * 100
+                        add_error = add(
+                            r_est, t_est, gt_pose[:3, :3], gt_pose[:3, 3], batch["roi_points"][0].detach().cpu().numpy()
+                        )
+                        debug_results["iter_{:04d}".format(iteration)] = {
+                            "pose_gt": gt_pose,
+                            "pose_est": np.hstack([r_est, t_est.reshape(3, 1)]),
+                            "r_error": r_error,
+                            "t_error": t_error,
+                            "add_error": add_error,
+                            "loss": losses_reduced,
+                        }
+                        storage.put_scalars(r_error_self=r_error, t_error_self=t_error, add_error_self=add_error)
+            else:
+                raise RuntimeError("Not in do_self or do_syn_sup")
 
-            # backward & optimize ======================================================
+            # ------------------------------------------------------------------
+            # backward & optimize
+            # ------------------------------------------------------------------
             if AMP_ON:
                 grad_scaler.scale(losses).backward()
 
@@ -354,35 +481,30 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
                             nan_to_num(param.grad, nan=0, posinf=1e5, neginf=-1e5, out=param.grad)
                     optimizer.step()
 
-            if comm.is_main_process():
-                log_first_n(logging.INFO, "iteration {} backward finished.".format(iteration), n=2)
             if iteration % accumulate_iter == 0:
                 optimizer.zero_grad(set_to_none=True)
-                if ema is not None:
-                    ema.update(model)
                 storage.put_scalar("lr", optimizer.param_groups[0]["lr"], smoothing_hint=False)
                 scheduler.step()
 
+            # ------------------------------------------------------------------
+            # update teacher model using ema
+            # ------------------------------------------------------------------
+            if ema is not None and (iteration + 1) % (cfg.MODEL.EMA.UPDATE_FREQ * iters_per_epoch) == 0:
+                ema.update(model)
+                ema.update_attr(model)
+
+            # ------------------------------------------------------------------
+            # do test periodically or after training
+            # ------------------------------------------------------------------
             if cfg.TEST.EVAL_PERIOD > 0 and (iteration + 1) % cfg.TEST.EVAL_PERIOD == 0 and iteration != max_iter - 1:
-                if ema is not None:
-                    ema.update_attr(model)
-                    do_test(
-                        cfg,
-                        model=ema.ema.module if hasattr(ema.ema, "module") else ema.ema,
-                        epoch=epoch,
-                        iteration=iteration,
-                    )
-                else:
-                    do_test(cfg, model, epoch=epoch, iteration=iteration)
+                do_test(cfg, model, epoch=epoch, iteration=iteration)
                 # Compared to "train_net.py", the test results are not dumped to EventStorage
                 comm.synchronize()
 
             # ------------------------------------------------------------------
             # some visualization
             # ------------------------------------------------------------------
-            if iteration - start_iter > 5 and (
-                (iteration + 1) % cfg.TRAIN.PRINT_FREQ == 0 or iteration == max_iter - 1 or iteration < 100
-            ):
+            if is_log_iter:
                 for writer in writers:
                     writer.write()
                 # visualize some images ========================================
@@ -418,6 +540,9 @@ def do_train(cfg, args, model, optimizer, renderer=None, resume=False):
             # checkpointer step
             # ------------------------------------------------------------------
             periodic_checkpointer.step(iteration, epoch=epoch)
+
+        if cfg.TRAIN.DEBUG_SINGLE_IM:
+            mmcv.dump(debug_results, osp.join(cfg.OUTPUT_DIR, "debug_results_{}.pkl".format(train_dset_names[0])))
 
 
 def vis_train_data(data, obj_names, cfg):

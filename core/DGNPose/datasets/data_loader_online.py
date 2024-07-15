@@ -16,23 +16,11 @@ from core.utils.data_utils import (
     read_image_mmcv,
     xyz_to_region,
 )
-from core.utils.dataset_utils import (
-    filter_empty_dets,
-    filter_invalid_in_dataset_dicts,
-    flat_dataset_dicts,
-    load_detections_into_dataset,
-    my_build_batch_data_loader,
-    trivial_batch_collator,
-)
-from core.utils.my_distributed_sampler import (
-    InferenceSampler,
-    RepeatFactorTrainingSampler,
-    TrainingSampler,
-)
+from core.utils.dataset_utils import flat_dataset_dicts
+
 from core.utils.ssd_color_transform import ColorAugSSDTransform
 from detectron2.data import MetadataCatalog
 from detectron2.data import detection_utils as utils
-from detectron2.data import get_detection_dataset_dicts
 from detectron2.data import transforms as T
 from detectron2.structures import BoxMode
 from detectron2.utils.logger import log_first_n
@@ -40,7 +28,6 @@ from lib.pysixd import inout, misc
 from lib.utils.mask_utils import cocosegm2mask, get_edge
 
 from .dataset_factory import register_datasets
-from .data_loader_online import Depth6DPose_Online_DatasetFromList
 
 logger = logging.getLogger(__name__)
 
@@ -98,7 +85,7 @@ def transform_instance_annotations(annotation, transforms, image_size, *, keypoi
     return annotation
 
 
-def build_Depth6DPose_augmentation(cfg, is_train):
+def build_DGNPose_augmentation(cfg, is_train):
     """Create a list of :class:`Augmentation` from config. when training 6d
     pose, cannot flip.
 
@@ -124,7 +111,7 @@ def build_Depth6DPose_augmentation(cfg, is_train):
     return augmentation
 
 
-class Depth6DPose_DatasetFromList(Base_DatasetFromList):
+class DGNPose_Online_DatasetFromList(Base_DatasetFromList):
     """NOTE: we can also use the default DatasetFromList and
     implement a similar custom DataMapper,
     but it is harder to implement some features relying on other dataset dicts
@@ -151,7 +138,7 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
                 enabled, data loader workers can use shared RAM from master
                 process instead of making a copy.
         """
-        self.augmentation = build_Depth6DPose_augmentation(cfg, is_train=(split == "train"))
+        self.augmentation = build_DGNPose_augmentation(cfg, is_train=(split == "train"))
         if cfg.INPUT.COLOR_AUG_PROB > 0 and cfg.INPUT.COLOR_AUG_TYPE.lower() == "ssd":
             self.augmentation.append(ColorAugSSDTransform(img_format=cfg.INPUT.FORMAT))
             logging.getLogger(__name__).info("Color augmentation used in training: " + str(self.augmentation[-1]))
@@ -322,8 +309,6 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
         cfg = self.cfg
         net_cfg = cfg.MODEL.POSE_NET
         g_head_cfg = net_cfg.GEO_HEAD
-        pnp_net_cfg = net_cfg.PNP_NET
-        loss_cfg = net_cfg.LOSS_CFG
 
         dataset_dict = copy.deepcopy(dataset_dict)  # it will be modified by code below
 
@@ -413,7 +398,7 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
             # yapf: disable
             roi_keys = ["scene_im_id", "file_name", "cam", "im_H", "im_W",
                         "roi_img", "inst_id", "roi_coord_2d", "roi_coord_2d_rel",
-                        "roi_cls", "score", "time", "roi_extent",
+                        "roi_cls", "score", "roi_extent",
                         bbox_key, "bbox_mode", "bbox_center", "roi_wh",
                         "scale", "resize_ratio", "model_info",
             ]
@@ -437,9 +422,7 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
 
                 roi_cls = inst_infos["category_id"]
                 roi_infos["roi_cls"].append(roi_cls)
-                roi_infos["score"].append(inst_infos.get("score", 1.0))
-
-                roi_infos["time"].append(inst_infos.get("time", 0))
+                roi_infos["score"].append(inst_infos["score"])
 
                 # extent
                 roi_extent = self._get_extents(dataset_name)[roi_cls]
@@ -517,32 +500,15 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
         roi_extent = self._get_extents(dataset_name)[roi_cls]
         dataset_dict["roi_extent"] = torch.tensor(roi_extent, dtype=torch.float32)
 
-        # load xyz =======================================================
-        xyz_info = mmcv.load(inst_infos["xyz_path"])
-        x1, y1, x2, y2 = xyz_info["xyxy"]
-        # float16 does not affect performance (classification/regresion)
-        xyz_crop = xyz_info["xyz_crop"]
-        xyz = np.zeros((im_H, im_W, 3), dtype=np.float32)
-        xyz[y1 : y2 + 1, x1 : x2 + 1, :] = xyz_crop
-        # NOTE: full mask
-        mask_obj = ((xyz[:, :, 0] != 0) | (xyz[:, :, 1] != 0) | (xyz[:, :, 2] != 0)).astype(np.bool).astype(np.float32)
-        if cfg.INPUT.SMOOTH_XYZ:
-            xyz = self.smooth_xyz(xyz)
-
-        if cfg.TRAIN.VIS:
-            xyz = self.smooth_xyz(xyz)
-
+        # override bbox using cropped 128 bbox
         if cfg.MODEL.BBOX_CROP_SYN and "syn" in img_type:
             inst_infos["bbox"] = inst_infos["bbox_crop"]
         elif cfg.MODEL.BBOX_CROP_REAL and "real" in img_type:
             inst_infos["bbox"] = inst_infos["bbox_crop"]
         else:
-            # override bbox info using xyz_infos
-            inst_infos["bbox"] = [x1, y1, x2, y2]
-            inst_infos["bbox_mode"] = BoxMode.XYXY_ABS
+            pass
 
         # USER: Implement additional transformations if you have other types of data
-        # inst_infos.pop("segmentation")  # NOTE: use mask from xyz
         anno = transform_instance_annotations(inst_infos, transforms, image_shape, keypoint_hflip_indices=None)
 
         # augment bbox ===================================================
@@ -579,7 +545,7 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
 
         ## roi_mask ---------------------------------------
         # (mask_trunc < mask_visib < mask_obj)
-        mask_visib = anno["segmentation"].astype("float32") * mask_obj
+        mask_visib = anno["segmentation"].astype("float32")
 
         if mask_trunc is None:
             mask_trunc = mask_visib
@@ -609,16 +575,7 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
             interpolation=mask_xyz_interp,
         )
 
-        roi_mask_obj = crop_resize_by_warp_affine(
-            mask_obj[:, :, None],
-            bbox_center,
-            scale,
-            out_res,
-            interpolation=mask_xyz_interp,
-        )
-
         if "mask_full" in anno.keys():
-            # TODO: maybe directly use mask_obj
             mask_full = anno["mask_full"].astype("float32")
             roi_mask_full = crop_resize_by_warp_affine(
                 mask_full[:, :, None],
@@ -628,60 +585,10 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
                 interpolation=mask_xyz_interp,
             )
 
-        ## roi_xyz ----------------------------------------------------
-        roi_xyz = crop_resize_by_warp_affine(xyz, bbox_center, scale, out_res, interpolation=mask_xyz_interp)
-
-        # region label
+        # fps points: for region label
         if g_head_cfg.NUM_REGIONS > 1:
             fps_points = self._get_fps_points(dataset_name)[roi_cls]
-            roi_region = xyz_to_region(roi_xyz, fps_points)  # HW
-            dataset_dict["roi_region"] = torch.as_tensor(roi_region.astype(np.int32)).contiguous()
-
-        roi_xyz = roi_xyz.transpose(2, 0, 1)  # HWC-->CHW
-        # normalize xyz to [0, 1] using extent
-        roi_xyz[0] = roi_xyz[0] / roi_extent[0] + 0.5
-        roi_xyz[1] = roi_xyz[1] / roi_extent[1] + 0.5
-        roi_xyz[2] = roi_xyz[2] / roi_extent[2] + 0.5
-
-        xyz_loss_type = loss_cfg.XYZ_LOSS_TYPE
-        if ("CE" in xyz_loss_type) or ("cls" in cfg.MODEL.POSE_NET.NAME):  # convert target to int for cls
-            n_xyz_bin = g_head_cfg.XYZ_BIN
-            # assume roi_xyz has been normalized in [0, 1]
-            roi_xyz_bin = np.zeros_like(roi_xyz)
-            roi_x_norm = roi_xyz[0]
-            roi_x_norm[roi_x_norm < 0] = 0  # clip
-            roi_x_norm[roi_x_norm > 0.999999] = 0.999999
-            # [0, BIN-1]
-            roi_xyz_bin[0] = np.asarray(roi_x_norm * n_xyz_bin, dtype=np.uint8)
-
-            roi_y_norm = roi_xyz[1]
-            roi_y_norm[roi_y_norm < 0] = 0
-            roi_y_norm[roi_y_norm > 0.999999] = 0.999999
-            roi_xyz_bin[1] = np.asarray(roi_y_norm * n_xyz_bin, dtype=np.uint8)
-
-            roi_z_norm = roi_xyz[2]
-            roi_z_norm[roi_z_norm < 0] = 0
-            roi_z_norm[roi_z_norm > 0.999999] = 0.999999
-            roi_xyz_bin[2] = np.asarray(roi_z_norm * n_xyz_bin, dtype=np.uint8)
-
-            # the last bin is for bg
-            roi_masks = {
-                "trunc": roi_mask_trunc,
-                "visib": roi_mask_visib,
-                "obj": roi_mask_obj,
-                "full": roi_mask_full,
-            }
-            roi_mask_xyz = roi_masks[loss_cfg.XYZ_LOSS_MASK_GT]
-            roi_xyz_bin[0][roi_mask_xyz == 0] = n_xyz_bin
-            roi_xyz_bin[1][roi_mask_xyz == 0] = n_xyz_bin
-            roi_xyz_bin[2][roi_mask_xyz == 0] = n_xyz_bin
-
-            if "CE" in xyz_loss_type:
-                dataset_dict["roi_xyz_bin"] = torch.as_tensor(roi_xyz_bin.astype("uint8")).contiguous()
-            if "/" in xyz_loss_type and len(xyz_loss_type.split("/")[1]) > 0:
-                dataset_dict["roi_xyz"] = torch.as_tensor(roi_xyz.astype("float32")).contiguous()
-        else:
-            dataset_dict["roi_xyz"] = torch.as_tensor(roi_xyz.astype("float32")).contiguous()
+            dataset_dict["roi_fps_points"] = torch.as_tensor(fps_points.astype(np.float32)).contiguous()
 
         # pose targets ----------------------------------------------------------------------
         pose = inst_infos["pose"]
@@ -697,7 +604,6 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
 
         dataset_dict["roi_mask_trunc"] = torch.as_tensor(roi_mask_trunc.astype("float32")).contiguous()
         dataset_dict["roi_mask_visib"] = torch.as_tensor(roi_mask_visib.astype("float32")).contiguous()
-        dataset_dict["roi_mask_obj"] = torch.as_tensor(roi_mask_obj.astype("float32")).contiguous()
         if "mask_full" in anno.keys():
             dataset_dict["roi_mask_full"] = torch.as_tensor(roi_mask_full.astype("float32")).contiguous()
 
@@ -732,120 +638,3 @@ class Depth6DPose_DatasetFromList(Base_DatasetFromList):
                 idx = self._rand_another(idx)
                 continue
             return processed_data
-
-
-def build_Depth6DPose_train_loader(cfg, dataset_names):
-    """A data loader is created by the following steps:
-
-    1. Use the dataset names in config to query :class:`DatasetCatalog`, and obtain a list of dicts.
-    2. Coordinate a random shuffle order shared among all processes (all GPUs)
-    3. Each process spawn another few workers to process the dicts. Each worker will:
-       * Map each metadata dict into another format to be consumed by the model.
-       * Batch them by simply putting dicts into a list.
-
-    The batched ``list[mapped_dict]`` is what this dataloader will yield.
-
-    Args:
-        cfg (CfgNode): the config
-
-    Returns:
-        an infinite iterator of training data
-    """
-    dataset_dicts = get_detection_dataset_dicts(
-        dataset_names,
-        filter_empty=cfg.DATALOADER.FILTER_EMPTY_ANNOTATIONS,
-        min_keypoints=cfg.MODEL.ROI_KEYPOINT_HEAD.MIN_KEYPOINTS_PER_IMAGE if cfg.MODEL.KEYPOINT_ON else 0,
-        proposal_files=cfg.DATASETS.PROPOSAL_FILES_TRAIN if cfg.MODEL.LOAD_PROPOSALS else None,
-    )
-
-    dataset_dicts = filter_invalid_in_dataset_dicts(dataset_dicts, visib_thr=cfg.DATALOADER.FILTER_VISIB_THR)
-
-    if cfg.MODEL.POSE_NET.XYZ_ONLINE:
-        dataset = Depth6DPose_Online_DatasetFromList(cfg, split="train", lst=dataset_dicts, copy=False)
-    else:
-        dataset = Depth6DPose_DatasetFromList(cfg, split="train", lst=dataset_dicts, copy=False)
-
-    sampler_name = cfg.DATALOADER.SAMPLER_TRAIN
-    logger = logging.getLogger(__name__)
-    logger.info("Using training sampler {}".format(sampler_name))
-    # TODO avoid if-else?
-    if sampler_name == "TrainingSampler":
-        sampler = TrainingSampler(len(dataset))
-    elif sampler_name == "RepeatFactorTrainingSampler":
-        repeat_factors = RepeatFactorTrainingSampler.repeat_factors_from_category_frequency(
-            dataset_dicts, cfg.DATALOADER.REPEAT_THRESHOLD
-        )
-        sampler = RepeatFactorTrainingSampler(repeat_factors)
-    else:
-        raise ValueError("Unknown training sampler: {}".format(sampler_name))
-    return my_build_batch_data_loader(
-        dataset,
-        sampler,
-        cfg.SOLVER.IMS_PER_BATCH,
-        aspect_ratio_grouping=cfg.DATALOADER.ASPECT_RATIO_GROUPING,
-        num_workers=cfg.DATALOADER.NUM_WORKERS,
-    )
-
-
-def build_Depth6DPose_test_loader(cfg, dataset_name, train_objs=None):
-    """Similar to `build_detection_train_loader`. But this function uses the
-    given `dataset_name` argument (instead of the names in cfg), and uses batch
-    size 1.
-
-    Args:
-        cfg: a detectron2 CfgNode
-        dataset_name (str): a name of the dataset that's available in the DatasetCatalog
-
-    Returns:
-        DataLoader: a torch DataLoader, that loads the given detection
-        dataset, with test-time transformation and batching.
-    """
-    dataset_dicts = get_detection_dataset_dicts(
-        [dataset_name],
-        filter_empty=False,
-        proposal_files=[cfg.DATASETS.PROPOSAL_FILES_TEST[list(cfg.DATASETS.TEST).index(dataset_name)]]
-        if cfg.MODEL.LOAD_PROPOSALS
-        else None,
-    )
-
-    # load test detection results
-    if cfg.MODEL.LOAD_DETS_TEST:
-        det_files = cfg.DATASETS.DET_FILES_TEST
-        assert len(cfg.DATASETS.TEST) == len(det_files)
-        dataset_dicts = load_detections_into_dataset(
-            dataset_name,
-            dataset_dicts,
-            det_file=det_files[cfg.DATASETS.TEST.index(dataset_name)],
-            top_k_per_obj=cfg.DATASETS.DET_TOPK_PER_OBJ,
-            score_thr=cfg.DATASETS.DET_THR,
-            train_objs=train_objs,
-        )
-        if cfg.DATALOADER.FILTER_EMPTY_DETS:
-            dataset_dicts = filter_empty_dets(dataset_dicts)
-
-    dataset = Depth6DPose_DatasetFromList(cfg, split="test", lst=dataset_dicts, flatten=False)
-
-    sampler = InferenceSampler(len(dataset))
-    # Always use 1 image per worker during inference since this is the
-    # standard when reporting inference time in papers.
-    batch_sampler = torch.utils.data.sampler.BatchSampler(sampler, 1, drop_last=False)
-
-    num_workers = cfg.DATALOADER.NUM_WORKERS
-    # Horovod: limit # of CPU threads to be used per worker.
-    # if num_workers > 0:
-    #     torch.set_num_threads(num_workers)
-
-    kwargs = {"num_workers": num_workers}
-    # When supported, use 'forkserver' to spawn dataloader workers instead of 'fork' to prevent
-    # issues with Infiniband implementations that are not fork-safe
-    # https://github.com/horovod/horovod/blob/master/examples/pytorch/pytorch_imagenet_resnet50.py
-    # if (num_workers > 0 and hasattr(mp, '_supports_context') and
-    #         mp._supports_context and 'forkserver' in mp.get_all_start_methods()):
-    #     kwargs['multiprocessing_context'] = 'forkserver'
-    data_loader = torch.utils.data.DataLoader(
-        dataset,
-        batch_sampler=batch_sampler,
-        collate_fn=trivial_batch_collator,
-        **kwargs,
-    )
-    return data_loader

@@ -29,11 +29,11 @@ from lib.utils.mask_utils import binary_mask_to_rle
 from lib.utils.utils import dprint
 from lib.vis_utils.image import grid_show, vis_image_bboxes_cv2
 
-from .Depth6DPose_engine_utils import batch_data, get_out_coor, get_out_mask
+from .DGNPose_engine_utils import batch_data, get_out_coor, get_out_mask
 from .test_utils import eval_cached_results, save_and_eval_results, to_list
 
 
-class Depth6DPose_Evaluator(DatasetEvaluator):
+class DGNPose_Evaluator(DatasetEvaluator):
     """use bop toolkit to evaluate."""
 
     def __init__(self, cfg, dataset_name, distributed, output_dir, train_objs=None):
@@ -548,7 +548,7 @@ class Depth6DPose_Evaluator(DatasetEvaluator):
         return results
 
 
-def Depth6DPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_test=False):
+def DGNPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_test=False):
     """Run model on the data_loader and evaluate the metrics with evaluator.
     Also benchmark the inference speed of `model.forward` accurately. The model
     will be used in eval mode.
@@ -609,7 +609,7 @@ def Depth6DPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_tes
             #         show_titles.extend(["coord_2d_x", "coord_2d_y"])
             #         grid_show(show_ims, show_titles, row=1, col=3)
 
-            with autocast(enabled=amp_test):  # Depth6DPose amp_test seems slower
+            with autocast(enabled=amp_test):  # DGNPose amp_test seems slower
                 out_dict = model(
                     batch["roi_img"],
                     roi_classes=batch["roi_cls"],
@@ -681,7 +681,7 @@ def Depth6DPose_inference_on_dataset(cfg, model, data_loader, evaluator, amp_tes
     return results
 
 
-def Depth6DPose_save_result_of_dataset(cfg, model, data_loader, output_dir, dataset_name, train_objs=None, amp_test=False):
+def DGNPose_save_result_of_dataset(cfg, model, data_loader, output_dir, dataset_name, train_objs=None, amp_test=False):
     """
     Run model (in eval mode) on the data_loader and save predictions
     Args:
@@ -753,7 +753,7 @@ def Depth6DPose_save_result_of_dataset(cfg, model, data_loader, output_dir, data
                 if all(_obj not in train_objs for _obj in cur_obj_names):
                     continue
             # NOTE: do model inference -----------------------------
-            with autocast(enabled=amp_test):  # Depth6DPose amp_test seems slower
+            with autocast(enabled=amp_test):  # DGNPose amp_test seems slower
                 out_dict = model(
                     batch["roi_img"],
                     roi_classes=batch["roi_cls"],

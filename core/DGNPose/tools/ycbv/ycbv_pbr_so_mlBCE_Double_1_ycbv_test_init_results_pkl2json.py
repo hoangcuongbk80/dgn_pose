@@ -51,12 +51,12 @@ if __name__ == "__main__":
     new_res_path = osp.join(
         PROJ_ROOT,
         "datasets/BOP_DATASETS/ycbv/test/init_poses/",
-        "resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_ycbv_test_Depth6DPosePose_with_yolov4_pbr_bbox.json",
+        "resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO_ycbv_test_DGNPosePose_with_yolov4_pbr_bbox.json",
     )
     if osp.exists(new_res_path):
         wprint("{} already exists! overriding!".format(new_res_path))
 
-    out_root = "output/Depth6DPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/"
+    out_root = "output/DGNPose/ycbvPbrSO/resnest50d_AugCosyAAEGray_BG05_visib10_mlBCE_DoubleMask_ycbvPbr100e_SO/"
     pred_paths = [
         "01_02MasterChefCan/inference_model_final_wo_optim-8624c7f1/ycbv_test/results.pkl",
         "02_03CrackerBox/inference_model_final_wo_optim-72f9c1da/ycbv_test/results.pkl",

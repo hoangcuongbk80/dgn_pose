@@ -1,6 +1,6 @@
-_base_ = ["../../../../_base_/Depth6DPose_base.py"]
+_base_ = ["../../../../_base_/DGNPose_base.py"]
 
-OUTPUT_DIR = "output/Depth6DPose/ssLM/ss_v1_dibr_mlBCE_FreezeBN_woCenter_woDepth_refinePM10/ape"
+OUTPUT_DIR = "output/DGNPose/ssLM/ss_v1_dibr_mlBCE_FreezeBN_woCenter_woDepth_refinePM10/ape"
 INPUT = dict(
     WITH_DEPTH=True,
     DZI_PAD_SCALE=1.5,
@@ -63,7 +63,7 @@ RENDERER = dict(DIFF_RENDERER="DIBR")  # DIBR | DIBR
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lm_pbr/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_lm_pbr_100e/ape/model_final_wo_optim-e8c99c96.pth",
+    WEIGHTS="output/DGNPose/lm_pbr/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_lm_pbr_100e/ape/model_final_wo_optim-e8c99c96.pth",
     # init
     # ad10    rete5    te2
     # 50.86   98.57    91.81
@@ -80,7 +80,7 @@ MODEL = dict(
         UPDATE_FREQ=10,  # update the mean teacher every n epochs
     ),
     POSE_NET=dict(
-        NAME="Depth6DPose",  # used module file name
+        NAME="DGNPose",  # used module file name
         # NOTE: for self-supervised training phase, use offline labels should be more accurate
         XYZ_ONLINE=False,  # rendering xyz online
         XYZ_BP=True,  # calculate xyz from depth by backprojection

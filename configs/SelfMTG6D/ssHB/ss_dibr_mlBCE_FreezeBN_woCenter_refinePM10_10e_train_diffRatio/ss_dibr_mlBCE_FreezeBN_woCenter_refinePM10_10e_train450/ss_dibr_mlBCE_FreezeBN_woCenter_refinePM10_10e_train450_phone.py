@@ -1,7 +1,7 @@
 _base_ = ["./ss_dibr_mlBCE_FreezeBN_woCenter_refinePM10_10e_train450_benchvise.py"]
 
-# refiner_cfg_path = "configs/_base_/Depth6DPose_refiner_base.py"
-OUTPUT_DIR = "output/Depth6DPose/ssHB/ss_dibr_mlBCE_FreezeBN_woCenter_refinePM10_10e_train450/phone"
+# refiner_cfg_path = "configs/_base_/DGNPose_refiner_base.py"
+OUTPUT_DIR = "output/DGNPose/ssHB/ss_dibr_mlBCE_FreezeBN_woCenter_refinePM10_10e_train450/phone"
 
 DATASETS = dict(
     TRAIN=("hb_bdp_phone_train450",),  # real data
@@ -13,5 +13,5 @@ RENDERER = dict(DIFF_RENDERER="DIBR")  # DIBR | DIBR
 
 MODEL = dict(
     # synthetically trained model
-    WEIGHTS="output/Depth6DPose/lm_pbr/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_lm_pbr_100e/phone/model_final_wo_optim-525a29f8.pth",
+    WEIGHTS="output/DGNPose/lm_pbr/resnest50d_a6_AugCosyAAEGray_BG05_mlBCE_lm_pbr_100e/phone/model_final_wo_optim-525a29f8.pth",
 )
